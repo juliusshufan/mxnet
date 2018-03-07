@@ -48,6 +48,7 @@ def rnncell_score_stacked(input_data, cell_type, ctx, layout='NTC'):
         dshape = (seq_len, bs, embed_dim) 
     data = mx.sym.Variable('data')
 
+    tic = time.time()
     #default layout='NTC'
     if cell_type == 'lstm':
         lstm_cell = mx.rnn.LSTMCell(hidden_size, prefix='l0_')
@@ -64,18 +65,27 @@ def rnncell_score_stacked(input_data, cell_type, ctx, layout='NTC'):
     mod.bind(data_shapes=[('data', dshape)], label_shapes=None)
     batch = mx.io.DataBatch(data=[mx.random.uniform(shape=dshape)], label=[])
     mod.init_params()
-    mod.init_optimizer(optimizer='sgd')
-    for i in range(dry_run+iter_num):
-        if i == dry_run:
-            tic = time.time()
-        mod.forward(batch, is_train=False)
-        for output in mod.get_outputs():
-            output.wait_to_read()
-     
-    eclapse = time.time()-tic
-    avg_eclapse = eclapse/iter_num
-    return avg_eclapse
 
+
+    mod.forward(batch, is_train=False)
+    fwd = time.time() - tic
+
+    for output in mod.get_outputs():
+        output.wait_to_read()
+
+    #fwd = time.time() - tic
+
+    #for i in range(dry_run+iter_num):
+    #    if i == dry_run:
+    #        tic = time.time()
+    #    mod.forward(batch, is_train=False)
+    #    for output in mod.get_outputs():
+    #        output.wait_to_read()
+     
+    #eclapse = time.time()-tic
+    #avg_eclapse = eclapse/iter_num
+    #return avg_eclapse
+    return fwd
 
 
 def rnncell_score_fused(input_data, cell_type, ctx, layout='NTC'):
@@ -93,6 +103,7 @@ def rnncell_score_fused(input_data, cell_type, ctx, layout='NTC'):
         dshape = (seq_len, bs, embed_dim)
     data = mx.sym.Variable('data')
 
+    tic = time.time()
     #default layout = 'NTC'
     if cell_type == 'lstm':
         lstm_cell = mx.rnn.FusedRNNCell(hidden_size, mode='lstm', prefix='l0_')
@@ -108,21 +119,35 @@ def rnncell_score_fused(input_data, cell_type, ctx, layout='NTC'):
     mod.bind(data_shapes=[('data', dshape)], label_shapes=None)
     batch = mx.io.DataBatch(data=[mx.random.uniform(shape=dshape)], label=[])
     mod.init_params()
-    for i in range(dry_run+iter_num):
-        if i == dry_run:
-            tic = time.time()
-        mod.forward(batch, is_train=False)
-        for output in mod.get_outputs():
-            output.wait_to_read()
+    
+    mod.forward(batch, is_train=False)
+    fwd = time.time() - tic
 
-    eclapse = time.time()-tic
-    avg_eclapse = eclapse/iter_num
-    return avg_eclapse
+    for output in mod.get_outputs():
+        output.wait_to_read()
+
+    #fwd = time.time() - tic
+    #for i in range(dry_run+iter_num):
+    #    if i == dry_run:
+    #        tic = time.time()
+    #    mod.forward(batch, is_train=False)
+    #    for output in mod.get_outputs():
+    #        output.wait_to_read()
+
+    #eclapse = time.time()-tic
+    #avg_eclapse = eclapse/iter_num
+    #return avg_eclapse
+    return fwd
 
 
 if __name__ == '__main__':
     
+    total_fwd = 0
     for input_shape in input_shape_list:
-        time_cost = rnncell_score_stacked(input_shape, 'lstm', mx.cpu())
-        print(str(input_shape) + ' cost ' + str(time_cost) + 's SPS = '+ str(input_shape[1]/time_cost))
+        for i in range(dry_run + iter_num):
+            fwd = rnncell_score_stacked(input_shape, 'lstm', mx.cpu())
+            if i >= dry_run:
+                total_fwd += fwd
+        total_fwd = total_fwd/iter_num  
+        print(str(input_shape) + ' cost ' + str(total_fwd) + 's SPS = '+ str(input_shape[0]/total_fwd))
 
